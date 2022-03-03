@@ -1,0 +1,507 @@
+---
+title: "Milestone Report"
+author: "Henry Truong"
+date: "28/02/2022"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, eval = TRUE, include = TRUE, 
+                      warning = FALSE, message = FALSE, error = FALSE,
+                      comment = "", fig.align = "center")
+```
+
+## **Getting and Understanding Data**
+
+There are 5 packages required for the whole report, which will be loaded at the start of the report:  
+  1. `tidyverse` package  
+  2. `tidytext` package  
+  3. `purrr` package  
+  4. `wordcloud` package  
+  5. `knitr` package  
+
+```{r packages}
+library(tidyverse)
+library(tidytext)
+library(purrr)
+library(wordcloud)
+library(knitr)
+```
+
+The database used to train the model can be accessed via **[this link]("https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip")**. The database is comprised of 4 sub-databases, each of which corresponds to each language. In this project, the focus is on **the English sub-database**. The text data within the English sub-database are collected from 3 different types of media:  
+  1. Blogs  
+  2. News  
+  3. Twitter  
+
+Each type of media will be summarized on the basis of  
+  1. `size`: The size of the file in MB  
+  2. `num_lines`: The total number of lines  
+  3. `num_chars`: The total number of characters  
+  4. `num_words`: The total number of words  
+  5. `pct_num_lines`: The proportion of total line number  
+  6. `pct_num_chars`: The proportion of total character number  
+  7. `pct_num_words`: The proportion of total word number  
+  
+```{r, cache = TRUE}
+if (!file.exists("data")) {
+  dir.create("data")
+}
+
+if (!file.exists("dataset.zip")) {
+  url <- "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip"
+  download.file(url = url, destfile = "dataset.zip", mode = "wb")
+  unzip(zipfile = "dataset.zip", exdir = "./data")
+}
+
+if (!file.exists("repo_summary.rds") | 
+    !file.exists("tibble_word.rds") |
+    !file.exists("tibble_nchar.rds")) {
+  blogs_file <- "./data/final/en_US/en_US.blogs.txt"
+  news_file <- "./data/final/en_US/en_US.news.txt"
+  twitter_file <- "./data/final/en_US/en_US.twitter.txt"
+  
+  blogs_size <- file.size(blogs_file)/2^20
+  news_size <- file.size(news_file)/2^20
+  twitter_size <- file.size(twitter_file)/2^20
+  
+  blogs <- read_lines(blogs_file)
+  news <- read_lines(news_file)
+  twitter <- read_lines(twitter_file)
+  
+  blogs_lines <- length(blogs)
+  news_lines <- length(news)
+  twitter_lines <- length(twitter)
+  
+  blogs_nchar <- nchar(blogs)
+  news_nchar <- nchar(news)
+  twitter_nchar <- nchar(twitter)
+  
+  tibble_nchar <- tibble(type = rep("blogs", blogs_lines),
+                         num_char = blogs_nchar) %>% 
+    bind_rows(tibble(type = rep("news", news_lines),
+                     num_char = news_nchar)) %>% 
+    bind_rows(tibble(type = rep("twitter", twitter_lines),
+                     num_char = twitter_nchar))
+  saveRDS(tibble_nchar, "tibble_nchar.rds")
+  
+  blogs_nchar_sum <- sum(blogs_nchar)
+  news_nchar_sum <- sum(news_nchar)
+  twitter_nchar_sum <- sum(twitter_nchar)
+  
+  blogs_word <- blogs %>% 
+    str_trim() %>% 
+    str_squish() %>% 
+    str_split(" ") %>% 
+    purrr::map_int(length)
+  news_word <- news %>%
+    str_trim() %>% 
+    str_squish() %>% 
+    str_split(" ") %>% 
+    purrr::map_int(length)
+  twitter_word <- twitter %>%
+    str_trim() %>% 
+    str_squish() %>% 
+    str_split(" ") %>% 
+    purrr::map_int(length)
+  
+  tibble_word <- tibble(type = rep("blogs", blogs_lines),
+                       num_word = blogs_word) %>% 
+    bind_rows(tibble(type = rep("news", news_lines),
+                     num_word = news_word)) %>% 
+    bind_rows(tibble(type = rep("twitter", twitter_lines),
+                     num_word = twitter_word))
+  saveRDS(tibble_word, "tibble_word.rds")
+  
+  blogs_word_sum <- sum(blogs_word)
+  news_word_sum <- sum(news_word)
+  twitter_word_sum <- sum(twitter_word)
+  
+  repo_summary <- tibble(file = c("blogs", "news", "twitter"),
+                         size = c(blogs_size, news_size, twitter_size),
+                         num_lines = c(blogs_lines, 
+                                       news_lines, 
+                                       twitter_lines),
+                         num_chars = c(blogs_nchar_sum, 
+                                       news_nchar_sum,
+                                       twitter_nchar_sum),
+                         num_words = c(blogs_word_sum, 
+                                       news_word_sum, 
+                                       twitter_word_sum)) %>%
+    mutate(pct_num_lines = num_lines/sum(num_lines),
+           pct_num_chars = num_chars/sum(num_chars),
+           pct_num_words = num_words/sum(num_words))
+} else {
+  repo_summary <- readRDS("repo_summary.rds")
+}
+
+repo_summary %>% kable()
+```
+  
+***Comment:*** From the summary table, it can be seen that although **twitter** has the highest number of lines, its size, total number of words and characters are the lowest.  
+
+The distribution of **the number of words per line** for each type of media can be shown by the following side-by-side box plots for comparison.  
+
+```{r, fig.asp = 1/1.5, fig.width = 4.5, cache = TRUE}
+tibble_word <- readRDS("tibble_word.rds")
+tibble_word %>% 
+  ggplot(aes(y = num_word, x = type, fill = type)) +
+  geom_boxplot(show.legend = FALSE) +
+  labs(x = NULL, y = "Number of words per line") +
+  scale_y_log10()
+```
+
+The distribution of **the number of characters per line** for each type of media can be shown by the following side-by-side box plots for comparison.  
+
+```{r, fig.asp = 1/1.5, fig.width = 4.5, cache = TRUE}
+tibble_nchar <- readRDS("tibble_nchar.rds")
+tibble_nchar %>% 
+  ggplot(aes(y = num_char, x = type, fill = type)) +
+  geom_boxplot(show.legend = FALSE) +
+  labs(x = NULL, y = "Number of characters per line") +
+  scale_y_log10()
+```
+
+***Comment:*** It can be concluded from this database that the numbers of both characters and words per line are lowest in the case of **twitter** and highest in the case of **news**.  
+
+Because of the large size of the English database, a random sample will be drawn for each type of media. The size of each sample is selected to be 0.1 of the size of the each original file. The collective repository of 3 samples is `repo_sample` which is a data frame with 2 columns:  
+  1. `text`: a character vector which contains text data  
+  2. `type`: a character vector which contains a certain type of media  
+
+Below is the snapshot of 10 random observations extracted from `repo_sample`.
+
+```{r, cache = TRUE}
+if (!file.exists("repo_sample.rds")) {
+  set.seed(12345)
+  blogs_sample <- sample(blogs, blogs_sample_size)
+  news_sample <- sample(news, news_sample_size)
+  twitter_sample <- sample(twitter, twitter_sample_size)
+  
+  repo_sample <- tibble(
+    text = c(blogs_sample, news_sample, twitter_sample),
+    type = rep(c("blogs", "news", "twitter"), 
+               times = c(blogs_sample_size, 
+                         news_sample_size, 
+                         twitter_sample_size))
+    )
+  saveRDS(repo_sample, "repo_sample.rds")
+} else {
+  repo_sample <- readRDS("repo_sample.rds")
+}
+
+set.seed(12345)
+repo_sample %>% 
+  sample_n(size = 10) %>% 
+  kable()
+```
+
+## **Cleaning Data**
+
+There are 2 lists of words that need to be filtered out from the text data:  
+  1. `stop_words_snowball`: The list of stop words retrieved from Snowball lexicon  
+  2. `profanity_words`: The list of profanity-related words retrieved from **[this link]("https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en")**  
+
+```{r, cache = TRUE}
+stop_words_snowball <- stop_words %>% 
+  filter(lexicon == "snowball")
+
+if (!file.exists("./data/final/en_US/profanity_words.txt")) {
+  profanity_url <- "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en"
+  download.file(url = profanity_url, destfile = "./data/final/en_US/profanity_words.txt")
+}
+profanity_words <- read_csv("./data/final/en_US/profanity_words.txt", 
+                            col_names = FALSE) %>% 
+  rename("word" = "X1") %>% 
+  mutate(word = word %>% str_to_lower())
+```
+
+A couple of functions are built to help clean the text data:  
+  1. `removeUrls()`: A function that removes website links from the text data  
+  2. `removeNumPunct()`: A function that removes characters that are not space or alphabetic  
+
+```{r, cache = TRUE}
+removeUrls <- function(x) {
+  str_remove_all(x, "http[^[:space:]]*")
+}
+
+removeNumPunct <- function(x) {
+  str_remove_all(x, "[^[:space:]|[:alpha:]]*")
+}
+```
+
+The clean text data will be saved in `repo_sample_clean` which is used in tokenization.  
+
+```{r, cache = TRUE}
+repo_sample_clean <- repo_sample %>% 
+  mutate(text = removeUrls(text)) %>% 
+  mutate(text = removeNumPunct(text))
+```
+
+## **Performing Exploratory Data Analysis**
+
+In this project, 4 n-gram models will be taken into consideration:  
+  1. Unigram  
+  2. Bigram  
+  3. Trigram  
+  4. Quadgram  
+
+Each model will have 2 versions: (1) with and (2) without words in the 2 lists mentioned previously.  
+
+### **Unigram**
+
+```{r, cache = TRUE}
+if (!file.exists("count_unigram.rds") |
+    !file.exists("count_filtered_unigram.rds") |
+    !file.exists("count_filtered_unigram_by_type.rds")) {
+  repo_sample_unigram <- repo_sample_clean %>% 
+    unnest_tokens(word, text)
+  
+  count_unigram <- repo_sample_unigram %>% 
+    count(word, sort = TRUE)
+  
+  repo_sample_filtered_unigram <- repo_sample_unigram %>%
+    anti_join(profanity_words) %>% 
+    anti_join(stop_words_snowball)
+  
+  count_filtered_unigram <- repo_sample_filtered_unigram %>% 
+    count(word, sort = TRUE)
+  
+  count_filtered_unigram_by_type <- repo_sample_filtered_unigram %>% 
+    count(type, word, sort = TRUE)
+  
+  saveRDS(count_unigram, "count_unigram.rds")
+  saveRDS(count_filtered_unigram, "count_filtered_unigram.rds")
+  saveRDS(count_filtered_unigram_by_type,
+          "count_filtered_unigram_by_type.rds")
+} else {
+  count_unigram <- readRDS("count_unigram.rds")
+  count_filtered_unigram <- readRDS("count_filtered_unigram.rds")
+  count_filtered_unigram_by_type <- readRDS("count_filtered_unigram_by_type.rds")
+}
+```
+
+The word cloud below shows the top 50 words with highest term frequency in the repository sample after filtering stop words and profanity-related words.  
+
+```{r, fig.asp = 1/1.5, fig.width = 6, cache = TRUE}
+wordcloud::wordcloud(count_filtered_unigram$word, 
+                     count_filtered_unigram$n,
+                     max.words = 50,
+                     random.order = FALSE,
+                     colors = RColorBrewer::brewer.pal(6, "Dark2"))
+```
+
+***Comment:*** The 5 most frequently used words or unigrams are (1) "will", (2) "just", (3) "said", (4) "like" and (5) "one."  
+
+We can go further by exploring how differently the most frequently used words or unigrams are used among 3 types of media.  
+
+```{r, fig.asp = 1/1.5, fig.width = 9, cache = TRUE}
+count_filtered_unigram_by_type %>% 
+  group_by(type) %>% 
+  slice_max(n, n = 15) %>%
+  ungroup() %>% 
+  ggplot(aes(n, reorder_within(word, n, type), fill = type)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(vars(type), scales = "free") +
+  scale_y_reordered() +
+  labs(x = "Frequency", y = NULL)
+```
+
+***Comment:***  
+  1. We can see that "said" is the remarkably most frequently used word in the case of news but it is not on the list of top 15 words in the case of blogs and twitter.  
+  2. The other 4 most frequently used words in the repository sample are on the list of top 15 words for all types of media.  
+
+We can extract a list of words which are most characteristic for each type of media using tf-idf (the product of term frequency and inverse document frequency).  
+
+```{r, fig.asp = 1/1.5, fig.width = 9, cache = TRUE}
+type_tf_idf <- count_filtered_unigram_by_type %>% 
+  bind_tf_idf(word, type, n)
+type_tf_idf %>% 
+  group_by(type) %>% 
+  slice_max(tf_idf, n = 15) %>% 
+  ungroup() %>% 
+  ggplot(aes(tf_idf, reorder_within(word, tf_idf, type), fill = type)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(vars(type), scales = "free") +
+  scale_y_reordered() +
+  labs(x = "tf-idf", y = NULL)
+```
+
+***Comment:*** The obvious difference between twitter and the other two is that abbreviations and contractions are dominant.  
+
+### **Bigram**
+
+```{r, cache = TRUE}
+if (!file.exists("count_bigram.rds") |
+    !file.exists("count_filtered_bigram.rds")) {
+  repo_sample_bigram <- repo_sample_clean %>% 
+    unnest_tokens(bigram, text, token = "ngrams", n = 2)
+  
+  count_bigram <- repo_sample_bigram %>% 
+    count(bigram, sort = TRUE) %>% 
+    filter(!is.na(bigram), n >= 10)
+  
+  repo_sample_filtered_bigram <- repo_sample_bigram %>% 
+    separate(bigram, c("item1", "item2"), sep = " ", remove = FALSE) %>%
+    filter(!item1 %in% c(stop_words_snowball$word,
+                         profanity_words$word),
+           !item2 %in% c(stop_words_snowball$word,
+                         profanity_words$word)) %>% 
+    select(-item1, -item2)
+  
+  count_filtered_bigram <- repo_sample_filtered_bigram %>% 
+    count(bigram, sort = TRUE) %>% 
+    filter(!is.na(bigram), n >= 10)
+  
+  saveRDS(count_bigram, "count_bigram.rds")
+  saveRDS(count_filtered_bigram, "count_filtered_bigram.rds")
+} else {
+  
+  count_bigram <- readRDS("count_bigram.rds")
+  count_filtered_bigram <- readRDS("count_filtered_bigram.rds")
+}
+```
+
+A list of top 20 most frequently used bigrams with and without filtering certain words is shown in the 2 bar charts below.  
+
+```{r, fig.asp = 1/1.5, fig.width = 6, cache = TRUE}
+count_bigram %>% 
+  slice_max(n, n = 20) %>% 
+  ggplot(aes(n, reorder(bigram, n))) +
+  geom_col(fill = "steelblue") +
+  labs(title = "Bigram without filtering certain words",
+       x = "Frequency", y = NULL)
+```
+
+```{r, fig.asp = 1/1.5, fig.width = 6, cache = TRUE}
+count_filtered_bigram %>% 
+  slice_max(n, n = 20) %>% 
+  ggplot(aes(n, reorder(bigram, n))) +
+  geom_col(fill = "seagreen") +
+  labs(title = "Bigram with filtering certain words",
+       x = "Frequency", y = NULL)
+```
+
+***Comment:*** We can see these are common phrases comprised of 2 words both with and without stop words.  
+
+### **Trigram**
+
+```{r, cache = TRUE}
+if (!file.exists("count_trigram.rds") |
+    !file.exists("count_filtered_trigram.rds")) {
+  
+  repo_sample_trigram <- repo_sample_clean %>% 
+    unnest_tokens(trigram, text, token = "ngrams", n = 3)
+  
+  count_trigram <- repo_sample_trigram %>% 
+    count(trigram, sort = TRUE) %>% 
+    filter(!is.na(trigram), n >= 10)
+  
+  repo_sample_filtered_trigram <- repo_sample_trigram %>%
+    semi_join(count_trigram) %>% 
+    separate(trigram, c("item1", "item2", "item3"), sep = " ", 
+             remove = FALSE) %>% 
+    filter(!item1 %in% c(stop_words_snowball$word,
+                         profanity_words$word),
+           !item2 %in% c(stop_words_snowball$word,
+                         profanity_words$word),
+           !item3 %in% c(stop_words_snowball$word,
+                         profanity_words$word)) %>% 
+    select(-item1, -item2, -item3)
+  
+  count_filtered_trigram <- repo_sample_filtered_trigram %>% 
+    count(trigram, sort = TRUE) %>% 
+    filter(!is.na(trigram), n >= 10)
+  
+  saveRDS(count_trigram, "count_trigram.rds")
+  saveRDS(count_filtered_trigram, "count_filtered_trigram.rds")
+} else {
+  
+  count_trigram <- readRDS("count_trigram.rds")
+  count_filtered_trigram <- readRDS("count_filtered_trigram.rds")
+}
+```
+
+A list of top 20 most frequently used trigrams with and without filtering certain words is shown in the 2 bar charts below.  
+
+```{r, fig.asp = 1/1.5, fig.width = 6, cache = TRUE}
+count_trigram %>% 
+    slice_max(n, n = 20) %>% 
+    ggplot(aes(n, reorder(trigram, n))) +
+    geom_col(fill = "steelblue") +
+    labs(title = "Trigram without filtering certain words", 
+         x = "Frequency", y = NULL)
+```
+
+```{r, fig.asp = 1/1.5, fig.width = 6, cache = TRUE}
+count_filtered_trigram %>% 
+    slice_max(n, n = 20) %>% 
+    ggplot(aes(n, reorder(trigram, n))) +
+    geom_col(fill = "seagreen") +
+    labs(title = "Trigram with filtering certain words",
+         x = "Frequency", y = NULL)
+```
+
+***Comment:*** We can see these are common phrases comprised of 3 words both with and without stop words. However there are 2 observations at rank 2 and 3 which seem to be meaningless (e.g. "vested interests vested" and "interests vested interests").  
+
+### **Quadgram**
+
+```{r, cache = TRUE}
+if (!file.exists("count_quadgram.rds") |
+    !file.exists("count_filtered_quadgram.rds")) {
+  
+  repo_sample_quadgram <- repo_sample_clean %>% 
+    unnest_tokens(quadgram, text, token = "ngrams", n = 4)
+  
+  count_quadgram <- repo_sample_quadgram %>% 
+    count(quadgram, sort = TRUE) %>% 
+    filter(!is.na(quadgram), n >= 10)
+  
+  repo_sample_filtered_quadgram <- repo_sample_quadgram %>% 
+    semi_join(count_quadgram) %>% 
+    separate(quadgram, c("item1", "item2", "item3", "item4"), sep = " ",
+             remove = FALSE) %>% 
+    filter(!item1 %in% c(stop_words_snowball$word,
+                         profanity_words$word),
+           !item2 %in% c(stop_words_snowball$word,
+                         profanity_words$word),
+           !item3 %in% c(stop_words_snowball$word,
+                         profanity_words$word),
+           !item4 %in% c(stop_words_snowball$word,
+                         profanity_words$word)) %>% 
+    select(-item1, -item2, -item3, -item4)
+  
+  count_filtered_quadgram <- repo_sample_filtered_quadgram %>% 
+    count(quadgram, sort = TRUE) %>% 
+    filter(!is.na(quadgram), n >= 10)
+  
+  saveRDS(count_quadgram, "count_quadgram.rds")
+  saveRDS(count_filtered_quadgram, "count_filtered_quadgram.rds")
+} else {
+  
+  count_quadgram <- readRDS("count_quadgram.rds")
+  count_filtered_quadgram <- readRDS("count_filtered_quadgram.rds")
+}
+```
+
+A list of top 20 most frequently used quadgrams with and without filtering certain words is shown in the 2 bar charts below..  
+
+```{r, fig.asp = 1/1.5, fig.width = 6, cache = TRUE}
+count_quadgram %>% 
+  slice_max(n, n = 20) %>% 
+  ggplot(aes(n, reorder(quadgram, n))) +
+  geom_col(fill = "steelblue") +
+  labs(title = "Quadgram without filtering certain words",
+       x = "Frequency", y = NULL)
+```
+
+```{r, fig.asp = 1/1.5, fig.width = 7.5, cache = TRUE}
+count_filtered_quadgram %>% 
+  slice_max(n, n = 20) %>% 
+  ggplot(aes(n, reorder(quadgram, n))) +
+  geom_col(fill = "seagreen") +
+  labs(title = "Quadgram with filtering certain words",
+       x = "Frequency", y = NULL)
+```
+
+***Comment:*** In this case, more observations which are meaningless appear. The 2 most common quadgrams are comprised of repeated phrases or bigrams and seem to be meaningless. Additionally, the frequency of quadgrams except the ones at 1st and 2nd places are lower than 50.  
+
+---
