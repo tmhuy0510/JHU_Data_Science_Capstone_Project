@@ -1,0 +1,43 @@
+---
+title: "Data Science Specialization Capstone Project"
+author: "Henry Truong"
+date: "03/03/2022"
+output: ioslides_presentation
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Capstone Project
+
+The core of this capstone project is ***Natural Language Processing***.  
+
+The final product is an application that is capable of predicting the next word while users are typing a text message.  
+
+## Model Construction
+
+The model used to accomplish this task is ***n-gram language model***. The value of n is in the range from 1 (unigram) and 4 (quadgram).  
+
+The priority of prediction is put on a higher-ordered n-gram language model.  
+
+Given its previous words, the next word is predicted using the term frequency.  
+
+## Text Input Preparation
+
+There are 4 steps to process the user's text input
+
+- Website links are removed
+- Non-space and non-alphabetic characters are removed
+- All characters are converted to be lowercase
+- All redundant spaces are striped
+
+## Final Product
+
+The final product is an user-friendly application, which is easy to use and is accessible even from smartphones. It also comes with clear short instructions.
+
+- Input: User's text in English without a limit of length  
+- Output: A list of 3 recommended words which are highly likely to occur next  
+
+[Text Predicting App Link](https://henry-truong-0510.shinyapps.io/Predictive_Text_Model/)
+
